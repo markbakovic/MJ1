@@ -1,0 +1,34 @@
+#!/bin/bash
+cd /sys/kernel/config/usb_gadget/
+mkdir -p mj1R
+cd mj1R
+echo 0x1d6b > idVendor # Linux Foundation
+echo 0x0104 > idProduct # Multifunction Composite Gadget
+echo 0x0100 > bcdDevice # v1.0.0
+echo 0x0200 > bcdUSB # USB2
+mkdir -p strings/0x409
+echo "0JR0001" > strings/0x409/serialnumber
+echo "Mark Bakovic/Bakovic Aerospace" > strings/0x409/manufacturer
+echo "Mark's Joystick Number 1 USB Device" > strings/0x409/product
+mkdir -p configs/c.1/strings/0x409
+echo "Config 1: ECM network" > configs/c.1/strings/0x409/configuration
+echo 250 > configs/c.1/MaxPower
+# Add functions here
+mkdir -p functions/hid.usb0
+echo 1 > functions/hid.usb0/protocol
+echo 1 > functions/hid.usb0/subclass
+echo 8 > functions/hid.usb0/report_length
+# this next bit should be interpreted as pairs of bytes
+# first byte is field (e.g. x19 is "Usage minimum" for 
+# a keyboard's "key codes" usage page...)
+# second byte is value (e.g. xe0 = 224 for numeric fields like "Usage Minimum")
+# Each usage page (field=x05) interprets the same byte as different fields!
+## For now this is the example joystick descriptor shipped with the HID tool
+## (i.e. basically a Flightstick Pro). FCLS will require multiple hats (09 39)
+## or quite a lot of buttons. Then need to deal with the dials (09 37?) and
+## two non-momentary switches (dogfight and speedbrake) on the TQS as well...
+## ... and the idle switch, and the touchstick... oy... 
+echo -ne \\ x05\\x01\\x15\\x00\\x09\\x04\\xa1\\x01\\x05\\x02\\x09\\xbb\\x15\\x81\\x25\\x7f\\x75\\x08\\x95\\x01\\x81\\x02\\x05\\x01\\x09\\x01\\xa1\\x00\\x09\\x30\\x09\\x31\\x95\\x02\\x81\\x02\\xc0\\x09\\x39\\x15\\x00\\x25\\x03\\x35\\x00\\x46\\x0e\\x01\\x65\\x14\\x75\\x04\\x95\\x01\\x81\\x02\\x05\\x09\\x19\\x01\\x29\\x04\\x15\\x00\\x25\\x01\\x75\\x01\\x95\\x04\\x55\\x00\\x65\\x00\\x81\\x02\\xc0 > functions/hid.usb0/report_desc
+ln -s functions/hid.usb0 configs/c.1/ 
+# End functions
+ls /sys/class/udc > UDC

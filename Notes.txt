@@ -1,0 +1,3 @@
+mj1fs_usb must be executable and live in /usr/bin
+add its path to /etc/rc.local to run it on startup
+device lives at /dev/hidg0 by default (can echo -ne byte strings > to it manually from the terminal)
