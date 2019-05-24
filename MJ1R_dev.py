@@ -18,7 +18,7 @@ CSPins = [5,6,13,19,26]
 
 # Set all pins as output
 for pin in CSPins:
-    print "Setup pins"
+    print("Setup pins")
     GPIO.setup(pin,GPIO.OUT)
     # check this. CS is often active low on SPI devices
     GPIO.output(pin, False)
@@ -50,6 +50,7 @@ spi.mode = 0
 # "performs an spi transaction" super clear that...
 # msg = [0x76]
 # spi.xfer2(msg)
+# writes msg, returns the output from the device, probably useful for ADCs at least
 # alternatively:
 # bla = spi.readbytes(n bytes)
 # spi.writebytes(list of bytes)
@@ -89,7 +90,7 @@ num_hats = 5
 
 axis_size = 8
 button_size = 1
-2pos_size = 2
+tupos_size = 2
 hat_size = 4 #actually it's 57 but never mind...
 
 # some CH Flightstick Pro data for use with the initial version
@@ -100,7 +101,7 @@ num_hats = 1
 
 # current report order is:
 # Throttle/X/Y/Dials/Hats/Buttons(/2pos)
-def organise(axes, axsize, buttons, buttsize, 2pos, 2psize, hats, hatsize):
+def organise(axes, axsize, buttons, buttsize, tupos, tupsize, hats, hatsize):
     repoutput = []
     #write each list order here!
-    repoutput = repaxes + rephats + repbutts + rep2pos
+    #repoutput = repaxes + rephats + repbutts + rep2pos
