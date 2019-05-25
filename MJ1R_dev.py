@@ -11,10 +11,21 @@ import RPi.GPIO as GPIO
 GPIO.setmode(GPIO.BCM)
 
 # Define GPIO signals to use for dodgy chip select
-# Physical pins 29,31,33,35,37 (i.e. the block of 5 next to 39GND at lower right
-# when looking at the board from above and with logos right way up)
-# GPIO5,GPIO6,GPIO13,GPIO19,GPIO26
-CSPins = [5,6,13,19,26]
+# Physical pins 11,13,15,29,31,33,35,37 (i.e. the block of 5 next to 39GND at lower right
+# when looking at the board from above and with logos right way up and the three next to the middle 3.3V+)
+# XGPIO17,XGPIO27,XGPIO22,GPIO5,GPIO6,GPIO13,GPIO19,GPIO26
+CSPins = [5,6,13,19,26] # got rid of 17,27,22 for now
+
+# for now let's say:
+# 5 = X/Y axes stick
+# 6 = Throttle
+# 13 = dials throttle
+# 19 = shift registers (buttons and hats) stick
+# 26 = shift registers (buttons and 2pos and hat) throttle
+# note each MCP3202 ADC is dual channel, so we could use one for both stick axes
+# and one for both dials as here (suits pots fine), or use another GPIO pin and have both channels
+# serve one axis (probably the way to go for hall sensing) on seperate ADCs
+# select which channel is read via SPI MOSI for the ADCs
 
 # Set all pins as output
 for pin in CSPins:
@@ -57,6 +68,24 @@ spi.mode = 0
 # though writebytes2 natively supports numpy arrays... otherwise use tolist()
 
 ### End SPI setup
+
+### MCP3202 12-bit dual ADC setup
+# Start bit is high 0x8
+#st = 1
+# I want single ended 0x4
+#se = 1
+# I want to start off reading channel 0, then channel 1 0x2
+#ch0 = 0
+#ch1 = 1
+# I want MSB first 0x1
+#msb = 1
+
+# so my messages are:
+adc0 = 0x08+0x04+0x01
+adc1 = 0x08+0x04+0x02+0x01
+
+# address the relevant ADC and assign output to xfer([0x0],[adc0/1]) to send a byte properly
+### End ADC setup
 
 # take a string of byte data (eg chars) and plop them in a HID report
 # default Flightstick Pro joystick sends 4 bytes (1 byte per axis,
@@ -104,4 +133,10 @@ num_hats = 1
 def organise(axes, axsize, buttons, buttsize, tupos, tupsize, hats, hatsize):
     repoutput = []
     #write each list order here!
+    # fix this shit
+    repaxes = [0x01]*(axes*axsize)
+    for ax in repaxes:
+        # just to test this out I'm writing null bytes. might as well get the data here eh?
+        # ax.append(0x00*axsize)
+    
     #repoutput = repaxes + rephats + repbutts + rep2pos
