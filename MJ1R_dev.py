@@ -24,15 +24,29 @@ CSPins = [5,6,13,19,26] # got rid of 17,27,22 for now
 # 26 = shift registers (buttons and 2pos and hat) throttle
 # note each MCP3202 ADC is dual channel, so we could use one for both stick axes
 # and one for both dials as here (suits pots fine), or use another GPIO pin and have both channels
-# serve one axis (probably the way to go for hall sensing) on seperate ADCs
+# serve one axis on seperate ADCs (probably the way to go for hall sensing) 
 # select which channel is read via SPI MOSI for the ADCs
+# so these variables encode what is where
+# [pin, channel/byte]
+Xax = [5,0] # X-axis
+Yax = [5,1] # Y-axis
+Tax = [6,0] # Throttle axis
+Rdl = [13,0] # Range dial (but not the clicker)
+Adl = [13,1] # Antenna elevation dial
+Sbu = [19,0] # All buttons on the stick (5)
+Sh1 = [19,1] # H1/H4 (the grey hats on the stick)
+Sh2 = [19,2] # H3/H2 (the black hats)
+
+# mouse on the throttle might also just be 2 axes (it is on the cougar TQS, pins 10 and 11 on the gameport...)
+# in fact, looks like just cleverly using the gameport is the way to go, there are no
+# registers in the TQS
 
 # Set all pins as output
 for pin in CSPins:
     print("Setup pins")
     GPIO.setup(pin,GPIO.OUT)
     # check this. CS is often active low on SPI devices
-    GPIO.output(pin, False)
+    GPIO.output(pin, True) # seems right for stick and is right for ADCs
 
 ### End GPIO setup
 
@@ -44,6 +58,7 @@ bus = 0
 #Device is the chip select pin. Set to 0 or 1, depending on the connections
 # possibly not implemented in my application, or switched via external circuitry
 device = 1
+# similar-purpose Arduino code uses a general pin for slave select/chip enable, so it whould be fine to use GPIO like I am doing...
 
 # Enable SPI
 spi = spidev.SpiDev()
@@ -83,9 +98,30 @@ spi.mode = 0
 # so my messages are:
 adc0 = 0x08+0x04+0x01
 adc1 = 0x08+0x04+0x02+0x01
+ADCchan = [adc0,adc1]
 
 # address the relevant ADC and assign output to xfer([0x0],[adc0/1]) to send a byte properly
 ### End ADC setup
+
+# collect axis data seperately (since ADCs are activated AND channel selected by MOSI)
+def pollCtrlAxis(ctrlSRC):
+    GPIO.output(ctrlSRC[0],False)
+    ctrlData = spi.xfer([0x0],[ADCchan[ctrlSRC[1]]])
+    GPIO.output(ctrlSRC[0],True)
+    return ctrlData
+
+# collect button data once per hand (4021 chains clock out on sequential null MOSI)
+# e.g. right hand? ctrlPin=19, registers=3
+def pollCtrlButt(ctrlPin, registers):
+    GPIO.output(ctrlPin,False)
+    ctrlData = []
+    i = 0
+    while i < 3:
+        ctrlData.append(spi.xfer([0x00]))
+        i++
+    GPIO.output(ctrlPin,True)
+    return ctrlData
+        
 
 # take a string of byte data (eg chars) and plop them in a HID report
 # default Flightstick Pro joystick sends 4 bytes (1 byte per axis,
