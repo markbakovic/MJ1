@@ -1,5 +1,8 @@
 # Mark's Joystick Number 1 - Research Edition development interface
 # Bits of this are probably copyright Mark Bakovic and/or Bakovic Aerospace, 2019
+# but I'm happy for any non-commercial use, just credit me.
+# Otherwise email me: my full name @ google's email and we can talk ;)
+
 import time
 import spidev
 import RPi.GPIO as GPIO
@@ -20,8 +23,8 @@ CSPins = [5,6,13,19,26] # got rid of 17,27,22 for now
 # 5 = X/Y axes stick
 # 6 = Throttle
 # 13 = dials throttle
-# 19 = shift registers (buttons and hats) stick
-# 26 = shift registers (buttons and 2pos and hat) throttle
+# 19 = touchstick (mouse) on throttle
+# 26 = shift registers (buttons and hats) stick
 # note each MCP3202 ADC is dual channel, so we could use one for both stick axes
 # and one for both dials as here (suits pots fine), or use another GPIO pin and have both channels
 # serve one axis on seperate ADCs (probably the way to go for hall sensing) 
@@ -33,9 +36,11 @@ Yax = [5,1] # Y-axis
 Tax = [6,0] # Throttle axis
 Rdl = [13,0] # Range dial (but not the clicker)
 Adl = [13,1] # Antenna elevation dial
-Sbu = [19,0] # All buttons on the stick (5)
-Sh1 = [19,1] # H1/H4 (the grey hats on the stick)
-Sh2 = [19,2] # H3/H2 (the black hats)
+Tmx = [19,0] # Touchstick X
+Tmy = [26,1] # Touchstick Y
+#Sbu = [26,0] # All buttons on the stick (5)
+#Sh1 = [26,1] # H1/H4 (the grey hats on the stick)
+#Sh2 = [26,2] # H3/H2 (the black hats)
 
 # mouse on the throttle might also just be 2 axes (it is on the cougar TQS, pins 10 and 11 on the gameport...)
 # in fact, looks like just cleverly using the gameport is the way to go, there are no
@@ -43,7 +48,7 @@ Sh2 = [19,2] # H3/H2 (the black hats)
 
 # Set all pins as output
 for pin in CSPins:
-    print("Setup pins")
+    print("Setup CS pins")
     GPIO.setup(pin,GPIO.OUT)
     # check this. CS is often active low on SPI devices
     GPIO.output(pin, True) # seems right for stick and is right for ADCs
@@ -110,18 +115,57 @@ def pollCtrlAxis(ctrlSRC):
     GPIO.output(ctrlSRC[0],True)
     return ctrlData
 
-# collect button data once per hand (4021 chains clock out on sequential null MOSI)
-# e.g. right hand? ctrlPin=19, registers=3
-def pollCtrlButt(ctrlPin, registers):
+# collect button from the stick (4021 chains clock out on sequential null MOSI)
+# currently ctrlPin=26, registers=3
+def pollCtrlStickButt(ctrlPin, registers):
     GPIO.output(ctrlPin,False)
     ctrlData = []
     i = 0
-    while i < 3:
-        ctrlData.append(spi.xfer([0x00]))
-        i++
+    while i < registers:
+        ctrlData.append([spi.xfer([0x00]]))
+        i+=1
     GPIO.output(ctrlPin,True)
     return ctrlData
-        
+
+# TQS is different to stick, uses button matrix. Poll pins (gameport 2,3,4 => P2/P3/P4 here)
+# normally held high, low to poll. Sense pins are pulled up by resist, pulled
+# down by low poll pin through any closed switch (=pressed button).
+# Poll 4,2,3,4 to debounce momentaries (T1/T6 both on P4 => S7/S6 resp.)
+# So: need to define 7 GPIO pins to handle TQS buttons. Using other side (and other 3.3V)
+# i.e. Pi17=SPI3.3V/Pi25=SPIGND while Pi01=TQSButt3.3V etc.
+# TQSButt GPIO 23,24,25,12,16,20,21 = Pi 16,18,22,32,36,38,40
+# and i might make the last 3 (because they're all together in the header) the
+# poll pins so:
+# [21,P2], [20,P3], [16,P4], [12,S6], [25,S7], [24,S8], [23,S9]
+TPpins = [16,20,21]
+TSpins = [23,24,25,12]
+
+for pin in TPPins:
+    print("Setup TP pins")
+    GPIO.setup(pin,GPIO.OUT)
+    GPIO.output(pin, True)
+    
+for pin in TSPins:
+    print("Setup TS pins")
+    GPIO.setup(pin,GPIO.IN)
+
+def pollCtrlThrotButt():
+    ctrlData = []
+    #poll P4 first here if debounce needed
+    for poll in TPpins:
+        GPIO.output(poll, False)
+        for sense in TSpins:
+            ctrlData.append(not GPIO.input(sense))
+        GPIO.output(poll, True)
+    return ctrlData
+
+That = [T2,T5,T3,T4]
+Df = [T7,T8]
+Sb = [T9,T10]
+Rk = T6
+Cur = T1
+
+TBits = That+Df+Sb+Rk+Cur
 
 # take a string of byte data (eg chars) and plop them in a HID report
 # default Flightstick Pro joystick sends 4 bytes (1 byte per axis,
@@ -134,13 +178,13 @@ def write_rep(report):
 nc = 0x00
 
 # some FCLS+TQS data I may use
-# axes include the two dials on the TQS
-# All 8-bit so far (but my ADCs are 12 bit/channel so we can change later)
-num_axes = 5
-# pushy buttons not including the touchstick clicker (not sure it can work)
+# axes include the two dials and the thumbstick on the TQS
+# my ADCs are 12 bit/channel
+num_axes = 7
+# pushy buttons including the touchstick clicker (T1)
 # but yes including the radar range dial clicker. Might add a null bit for padding...
 # One-bit reports
-num_buttons = 7
+num_buttons = 8
 # two-position (centre null or 3 pos with centre NC if you like) switches,
 # i.e. the dogfight switch, which stays in position either side,
 # and the speed brake switch, which is stay-put one way and momentary the other
@@ -153,7 +197,7 @@ num_2pos = 2
 # 4 bits each
 num_hats = 5
 
-axis_size = 8
+axis_size = 12
 button_size = 1
 tupos_size = 2
 hat_size = 4 #actually it's 57 but never mind...
@@ -163,6 +207,51 @@ num_axes = 3
 num_buttons = 4
 num_2pos = 0
 num_hats = 1
+
+# stuff it, let's hold everything in memory
+X = [False]*axis_size #stick X
+Y = [False]*axis_size
+T = [False]*axis_size #14 throttle
+R = [False]*axis_size #13 range knob
+A = [False]*axis_size #12 antenna elevation
+x = [False]*axis_size #touchstick X 10
+y = [False]*axis_size #11
+H1 = [False]*hat_size #trim DRUL R2x80,40,20,10
+H2 = [False]*hat_size #tms DRUL R3x08,04,02,01
+H3 = [False]*hat_size #dms ULDR R3x80,40,20,10
+H4 = [False]*hat_size #cms DRUL R2x08,04,02,01
+HT = [False]*hat_size #rad ULDR T2,T5,T3,T4
+S3 = False #pinky R1x80
+TG1 = False #Trigger stage 1 R1x40
+TG2 = False #Trigger stage 2 R1x20
+S1 = False #index R1x10
+S4 = False #paddle R1x08
+S2 = False #thumb/weaprel R1x04
+DF = [False]*tupos_size #dogfight T7,8
+SB = [False]*tupos_size #speedbrake T9,10
+RK = False #range knob clicker T6
+MC = False #touchstick selector T1
+
+Axes = [[Xax,X], [Yax,Y], [Tax,T], [Rdl,R], [Adl,A], [Tmx,x], [Tmy,y]
+
+def poll():
+    for ax in Axes:
+        ax[1] = pollCtrlAxis(ax[0])
+    data = pollCtrlThrotButt()
+    i=0
+    for rad in HT:
+        rad = data[i]
+        i+=1
+    for dog in DF:
+        dog = data[i]
+        i+=1
+    for brake in SB:
+        brake = data[i]
+        i+=1
+    RK = data[i]
+    MC = data[i+1]
+    i=0
+    
 
 # current report order is:
 # Throttle/X/Y/Dials/Hats/Buttons(/2pos)
