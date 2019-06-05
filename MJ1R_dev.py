@@ -37,7 +37,7 @@ Tax = [6,0] # Throttle axis
 Rdl = [13,0] # Range dial (but not the clicker)
 Adl = [13,1] # Antenna elevation dial
 Tmx = [19,0] # Touchstick X
-Tmy = [26,1] # Touchstick Y
+Tmy = [19,1] # Touchstick Y
 #Sbu = [26,0] # All buttons on the stick (5)
 #Sh1 = [26,1] # H1/H4 (the grey hats on the stick)
 #Sh2 = [26,2] # H3/H2 (the black hats)
@@ -232,7 +232,7 @@ SB = [False]*tupos_size #speedbrake T9,10
 RK = False #range knob clicker T6
 MC = False #touchstick selector T1
 
-Axes = [[Xax,X], [Yax,Y], [Tax,T], [Rdl,R], [Adl,A], [Tmx,x], [Tmy,y]
+Axes = [[Xax,X], [Yax,Y], [Tax,T], [Rdl,R], [Adl,A], [Tmx,x], [Tmy,y]]
 
 def poll():
     for ax in Axes:
@@ -251,6 +251,32 @@ def poll():
     RK = data[i]
     MC = data[i+1]
     i=0
+    data = pollCtrlStickButt(26,3)
+    a = data[0]
+    S3 = 0x80==0x80&a
+    TG1 = 0x40==0x40&a
+    TG2 = 0x20==0x20&a
+    S1 = 0x10==0x10&a
+    S4 = 0x08==0x08&a
+    S2 = 0x04==0x04&a
+    a = data[1]
+    H1[0] = 0x80==0x80&a
+    H1[1] = 0x40==0x40&a
+    H1[2] = 0x20==0x20&a
+    H1[3] = 0x10==0x10&a
+    H4[0] = 0x08==0x08&a
+    H4[1] = 0x04==0x04&a
+    H4[2] = 0x02==0x02&a
+    H4[3] = 0x01==0x01&a
+    a = data[2]
+    H3[0] = 0x80==0x80&a
+    H3[1] = 0x40==0x40&a
+    H3[2] = 0x20==0x20&a
+    H3[3] = 0x10==0x10&a
+    H2[0] = 0x08==0x08&a
+    H2[1] = 0x04==0x04&a
+    H2[2] = 0x02==0x02&a
+    H2[3] = 0x01==0x01&a
     
 
 # current report order is:
@@ -265,3 +291,11 @@ def organise(axes, axsize, buttons, buttsize, tupos, tupsize, hats, hatsize):
         # ax.append(0x00*axsize)
     
     #repoutput = repaxes + rephats + repbutts + rep2pos
+
+while True:
+    curtime = time.time() #HID data limit 64kB/s, assume writing 8 byte reports to device, no point writing too many: max 8k writes/s
+    poll()
+    while time.time()-curtime < 0.000125:
+        time.sleep(0.00002)
+    write_rep(organise(num_axes,axis_size,num_buttons,button_size,num_2pos,tupos_size,num_hats,hat_size))
+        
